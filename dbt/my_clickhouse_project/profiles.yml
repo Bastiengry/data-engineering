@@ -1,0 +1,11 @@
+clickhouse_profile:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      schema: datamart
+      host: clickhouse-datamart
+      port: 8123
+      user: datamart
+      password: datamart
+      secure: False

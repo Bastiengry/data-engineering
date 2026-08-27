@@ -69,6 +69,7 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./spark/app:/opt/airflow/spark/app
       - ./logs:/opt/airflow/logs
+      - ./dbt:/opt/airflow/dbt
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -92,6 +93,7 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./spark/app:/opt/airflow/spark/app
       - ./logs:/opt/airflow/logs
+      - ./dbt:/opt/airflow/dbt
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor

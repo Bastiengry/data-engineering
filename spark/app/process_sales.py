@@ -1,59 +1,51 @@
-import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, sum as _sum, count, round
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType
 
 def main():
-    # 1. Initialisation de la Session Spark (AVEC le driver JDBC PostgreSQL)
     spark = SparkSession.builder \
-        .appName("SalesDataProcessing") \
-        .config("spark.jars.packages", "org.postgresql:postgresql:42.6.0") \
+        .appName("ProcessSalesToClickHouse") \
+        .config("spark.jars.packages", "com.clickhouse:clickhouse-jdbc:0.6.0,org.apache.httpcomponents.client5:httpclient5:5.2.1") \
         .getOrCreate()
 
-    # Masquer les logs verbeux
-    spark.sparkContext.setLogLevel("WARN")
-    print("=== DÉBUT DU TRAITEMENT DES VENTES ===")
+    # Définition du schéma correspondant au CSV généré
+    schema = StructType([
+        StructField("transaction_id", StringType(), True),
+        StructField("timestamp", TimestampType(), True),
+        StructField("store", StringType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("quantity", IntegerType(), True),
+        StructField("price", DoubleType(), True)
+    ])
 
-    # 2. Chemin du fichier adapté au conteneur Airflow
+    # 1. Lecture du fichier CSV généré
     input_path = "/opt/airflow/data/sales.csv"
+    df = spark.read.csv(input_path, header=True, schema=schema)
 
-    if not os.path.exists(input_path):
-        print(f"Erreur : Le fichier {input_path} n'existe pas.")
-        return
+    # 2. Transformation : Calcul du montant total par ligne puis agrégation
+    df_transformed = df.withColumn("total_amount", F.col("quantity") * F.col("price")) \
+                       .groupBy("store", "product_id") \
+                       .agg(
+                           F.sum("quantity").alias("total_quantity"),
+                           F.round(F.sum("total_amount"), 2).alias("total_revenue")
+                       )
 
-    # 3. Lecture du fichier CSV
-    print(f"Lecture du fichier : {input_path}")
-    df_raw = spark.read \
-        .option("header", "true") \
-        .option("inferSchema", "true") \
-        .csv(input_path)
+    # 3. Écriture dans ClickHouse
+    clickhouse_url = "jdbc:ch://clickhouse-datamart:8123/datamart"
 
-    # 4. Transformations des données
-    df_transformed = df_raw \
-        .withColumn("line_total", col("quantity") * col("price")) \
-        .groupBy("product_id") \
-        .agg(
-            _sum("quantity").alias("total_quantity"),
-            round(_sum("line_total"), 2).alias("total_revenue"),
-            count("product_id").alias("transaction_count")
-        )
-
-    print("--- Résultat de la transformation ---")
-    df_transformed.show()
-
-    # 5. Configuration JDBC pour écriture dans postgres-datamart
-    jdbc_url = "jdbc:postgresql://postgres-datamart:5432/datamart"
-    db_properties = {
-        "user": "datamart",
-        "password": "datamart",
-        "driver": "org.postgresql.Driver"
-    }
-
-    # 6. Écriture dans la base PostgreSQL
-    print("Écriture dans la base PostgreSQL (Datamart)...")
     df_transformed.write \
-        .jdbc(url=jdbc_url, table="sales_summary", mode="overwrite", properties=db_properties)
+        .format("jdbc") \
+        .option("url", clickhouse_url) \
+        .option("dbtable", "sales_summary") \
+        .option("user", "datamart") \
+        .option("password", "datamart") \
+        .option("createTableOptions", "ENGINE = MergeTree() ORDER BY (store, product_id)") \
+        .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
+        .option("batchsize", "100000") \
+        .mode("append") \
+        .save()
 
-    print("=== TRAITEMENT TERMINÉ AVEC SUCCÈS ===")
+    print("✅ Données Spark écrites avec succès dans ClickHouse")
     spark.stop()
 
 if __name__ == "__main__":

@@ -9,11 +9,9 @@
 
 # Vérifier le résultat
 
-- Aller sur le client SQL (adminer) : http://localhost:8081
+- Aller sur Clickhouse : http://localhost:8123/play
 - Se connecter à la base de données :
-  - Système : PostgreSQL
-  - Serveur : postgres-datamart
-  - Utilisateur : datamart
+  - Serveur : http://localhost:8123
+  - Utilisateur : datamart      (==> à écrire à la place de default)
   - Mot de passe : datamart
-  - Base de données : datamart
-  - Exécutez la requête "SELECT * FROM sales_summary;" pour voir les résultats.
+  - Exécutez la requête "SELECT * FROM datamart.sales_summary;" pour voir les résultats.
